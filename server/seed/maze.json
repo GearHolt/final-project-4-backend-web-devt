@@ -1,0 +1,85 @@
+[
+  {
+    "slug": "users_guest", "room": "users", "title": "guest", "isStart": true,
+    "document": {
+      "_id": "ObjectId('65f1a0c1')",
+      "username": "guest",
+      "status": "locked",
+      "note": "Every document has fields. Each field has a key and a value. Read the value of status."
+    },
+    "puzzle": { "prompt": "What is the value of the status field?", "hint": "Look for the key status. The word next to it is the answer.", "answer": "locked" },
+    "exits": [{ "label": "Enter the logs room", "to": "logs_entry_01" }]
+  },
+  {
+    "slug": "logs_entry_01", "room": "logs", "title": "entry_01",
+    "document": {
+      "_id": "ObjectId('65f1a0c2')",
+      "user": "m.vale",
+      "action": "deleted",
+      "ref": { "collection": "vault", "key": "door" },
+      "note": "A ref points to another document. This one points to a key inside the vault."
+    },
+    "puzzle": { "prompt": "Inside ref, what is the value of key?", "hint": "ref is a smaller document inside this one. Read its key field.", "answer": "door" },
+    "exits": [{ "label": "Open the next log", "to": "logs_entry_02" }]
+  },
+  {
+    "slug": "logs_entry_02", "room": "logs", "title": "entry_02",
+    "document": {
+      "_id": "ObjectId('65f1a0c3')",
+      "user": "m.vale",
+      "action": "encrypted",
+      "codes": [2, 5, 9],
+      "note": "The square brackets mean an array. The last code opens the way."
+    },
+    "puzzle": { "prompt": "What is the last number in the codes array?", "hint": "Read the list from left to right. The final number is the answer.", "answer": "9" },
+    "exits": [
+      { "label": "Go to the vault door", "to": "vault_door" },
+      { "label": "Visit the old archive", "to": "archive_old" }
+    ]
+  },
+  {
+    "slug": "archive_old", "room": "archive", "title": "old",
+    "document": {
+      "_id": "ObjectId('65f1a0c4')",
+      "type": "backup",
+      "deprecated": true,
+      "note": "Nothing here is useful. Go back to the logs and take the other path."
+    },
+    "exits": [{ "label": "Go back to the logs", "to": "logs_entry_02" }]
+  },
+  {
+    "slug": "vault_door", "room": "vault", "title": "door",
+    "document": {
+      "_id": "ObjectId('65f1a0c5')",
+      "type": "door",
+      "locked": true,
+      "owner": { "name": "Minos", "role": "keeper" },
+      "note": "Documents can hold other documents. The owner of this door is named inside owner."
+    },
+    "puzzle": { "prompt": "Who is the owner of this file?", "hint": "Look inside the curly braces after owner.", "answer": "Minos" },
+    "exits": [{ "label": "Enter the ledger", "to": "vault_ledger" }]
+  },
+  {
+    "slug": "vault_ledger", "room": "vault", "title": "ledger",
+    "document": {
+      "_id": "ObjectId('65f1a0c6')",
+      "accounts": [
+        { "_id": "acc_1", "owner": "vale", "verified": true },
+        { "_id": "acc_2", "owner": "reyes", "verified": true },
+        { "_id": "acc_3", "owner": "unknown" }
+      ],
+      "note": "Documents in the same list should look alike. One account is missing a field."
+    },
+    "puzzle": { "prompt": "Which account _id has no verified field?", "hint": "Two accounts have verified. Find the one that does not.", "answer": "acc_3" },
+    "exits": [{ "label": "Descend to the core", "to": "core_final" }]
+  },
+  {
+    "slug": "core_final", "room": "core", "title": "core", "isFinal": true,
+    "document": {
+      "_id": "ObjectId('65f1a0c7')",
+      "type": "truth",
+      "message": "Yay you got to the ending. Placeholder text btw."
+    },
+    "exits": []
+  }
+]
