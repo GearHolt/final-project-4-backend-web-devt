@@ -10,6 +10,17 @@ app.use(cors({ origin: process.env.CLIENT_URL || "*" }));
 app.get("/health", (req, res) => res.send("ok"));
 
 app.use("/api/files", require("./routes/files"));
+app.use("/api/auth", require("./routes/auth"));
+app.use("/api", (req, res) => res.status(404).json({ error: "Not found" }));
+
+app.use((err, req, res, next) => {
+    if (err.type === "entity.parse.failed") {
+        return res.status(400).json({ error: "Request body is not valid JSON" });
+    }
+    console.error(err);
+    res.status(500).json({ error: "server error" });
+});
+app.get("/", (req, res) => res.send("minosdb api"));
 
 mongoose.connect(process.env.MONGODB_URI)
     .then(() => {
