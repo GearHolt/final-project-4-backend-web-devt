@@ -9,7 +9,7 @@ app.use(cors({ origin: process.env.CLIENT_URL || "*" }));
 
 app.get("/health", (req, res) => res.send("ok"));
 
-//smth smth routes later
+app.use("/api/files", require("./routes/files"));
 
 mongoose.connect(process.env.MONGODB_URI)
     .then(() => {
