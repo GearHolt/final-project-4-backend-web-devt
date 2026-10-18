@@ -2,16 +2,11 @@ const mongoose = require("mongoose");
 
 const FileSchema = new mongoose.Schema({
     slug: { type: String, unique: true, required: true },
-    room: String,
-    title: String,
+    name: String,
+    type: { type: String, enum: ["folder", "file"], required: true },
+    parent: { type: String, default: null },
     document: mongoose.Schema.Types.Mixed,
-    puzzle: {
-        prompt: String,
-        hint: String,
-        answerHash: String
-    },
-    exits: [{ label: String, to: String }],
-    isStart: { type: Boolean, default: false },
+    lock: { prompt: String, hint: String, answerHash: String },
     isFinal: { type: Boolean, default: false }
 });
 

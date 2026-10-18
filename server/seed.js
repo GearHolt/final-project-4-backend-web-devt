@@ -1,7 +1,7 @@
 require("dotenv").config();
 const crypto = require("crypto");
 const mongoose = require("mongoose");
-const File = require("./models/File");
+const File = require("./models/file");
 const maze = require("./seed/maze.json");
 
 const hash = (s) =>
@@ -11,14 +11,14 @@ const hash = (s) =>
     try {
         await mongoose.connect(process.env.MONGODB_URI);
         await File.deleteMany({});
-        const docs = maze.map(({ puzzle, ...rest }) => ({
+        const docs = maze.map(({ lock, ...rest }) => ({
             ...rest,
-            puzzle: puzzle
-                ? { prompt: puzzle.prompt, hint: puzzle.hint, answerHash: hash(puzzle.answer) }
+            lock: lock
+                ? { prompt: lock.prompt, hint: lock.hint, answerHash: hash(lock.answer) }
                 : undefined
         }));
         await File.insertMany(docs);
-        console.log(`Seeded ${docs.length} files`);
+        console.log(`Seeded ${docs.length} items`);
     } catch (err) {
         console.error("Seed failed:", err);
     } finally {
