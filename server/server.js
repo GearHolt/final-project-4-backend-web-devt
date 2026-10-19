@@ -11,6 +11,7 @@ app.get("/health", (req, res) => res.send("ok"));
 
 app.use("/api/files", require("./routes/files"));
 app.use("/api/auth", require("./routes/auth"));
+app.use("/api/saves", require("./routes/saves"));
 app.use("/api", (req, res) => res.status(404).json({ error: "Not found" }));
 
 app.use((err, req, res, next) => {
