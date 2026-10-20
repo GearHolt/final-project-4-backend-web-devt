@@ -60,11 +60,22 @@ router.put("/:userId", async (req, res) => {
 
         if (!(await User.exists({ _id: id }))) return res.status(404).json({ error: "user not found" });
 
-        const save = await Save.findOneAndUpdate(
-            { user: id },
-            { solved: list, location, wrongGuesses, updatedAt: new Date() },
-            { upsert: true, new: true, setDefaultsOnInsert: true }
-        );
+        // finished once every lock is in the list, the server stamps the time itself
+        const locks = await File.find({ "lock.answerHash": { $exists: true } }).select("slug");
+        const finished = locks.every((l) => list.includes(l.slug));
+        const before = await Save.findOne({ user: id });
+
+        const change = {
+            $set: { solved: list, location, wrongGuesses, updatedAt: new Date() },
+            $setOnInsert: { startedAt: new Date() }
+        };
+        if (!finished) change.$unset = { finishedAt: "" };
+        else if (!before || !before.finishedAt) change.$set.finishedAt = new Date();
+
+        const save = await Save.findOneAndUpdate({ user: id }, change, {
+            upsert: true,
+            returnDocument: "after"
+        });
         res.json(save);
     } catch (e) {
         res.status(500).json({ error: "server error" });
@@ -78,6 +89,25 @@ router.delete("/:userId", async (req, res) => {
         const gone = await Save.findOneAndDelete({ user: id });
         if (!gone) return res.status(404).json({ error: "no save found" });
         res.json({ message: "save deleted" });
+    } catch (e) {
+        res.status(500).json({ error: "server error" });
+    }
+});
+
+//everything player has read or seen
+router.get("/:userId/clues", async (req, res) => {
+    const id = targetId(req, res);
+    if (!id) return;
+    try {
+        const save = await Save.findOne({ user: id });
+        if (!save) return res.status(404).json({ error: "no save found" });
+
+        const files = await File.find({ slug: { $in: save.hintsSeen } });
+        files.sort((a, b) => save.hintsSeen.indexOf(a.slug) - save.hintsSeen.indexOf(b.slug));
+
+        res.json(files.map((f) => ({
+            slug: f.slug, name: f.name, parent: f.parent, document: f.document
+        })));
     } catch (e) {
         res.status(500).json({ error: "server error" });
     }
