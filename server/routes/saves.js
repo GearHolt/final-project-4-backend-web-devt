@@ -94,4 +94,23 @@ router.delete("/:userId", async (req, res) => {
     }
 });
 
+//everything player has read or seen
+router.get("/:userId/clues", async (req, res) => {
+    const id = targetId(req, res);
+    if (!id) return;
+    try {
+        const save = await Save.findOne({ user: id });
+        if (!save) return res.status(404).json({ error: "no save found" });
+
+        const files = await File.find({ slug: { $in: save.hintsSeen } });
+        files.sort((a, b) => save.hintsSeen.indexOf(a.slug) - save.hintsSeen.indexOf(b.slug));
+
+        res.json(files.map((f) => ({
+            slug: f.slug, name: f.name, parent: f.parent, document: f.document
+        })));
+    } catch (e) {
+        res.status(500).json({ error: "server error" });
+    }
+});
+
 module.exports = router;
