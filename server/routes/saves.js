@@ -60,11 +60,22 @@ router.put("/:userId", async (req, res) => {
 
         if (!(await User.exists({ _id: id }))) return res.status(404).json({ error: "user not found" });
 
-        const save = await Save.findOneAndUpdate(
-            { user: id },
-            { solved: list, location, wrongGuesses, updatedAt: new Date() },
-            { upsert: true, new: true, setDefaultsOnInsert: true }
-        );
+        // finished once every lock is in the list, the server stamps the time itself
+        const locks = await File.find({ "lock.answerHash": { $exists: true } }).select("slug");
+        const finished = locks.every((l) => list.includes(l.slug));
+        const before = await Save.findOne({ user: id });
+
+        const change = {
+            $set: { solved: list, location, wrongGuesses, updatedAt: new Date() },
+            $setOnInsert: { startedAt: new Date() }
+        };
+        if (!finished) change.$unset = { finishedAt: "" };
+        else if (!before || !before.finishedAt) change.$set.finishedAt = new Date();
+
+        const save = await Save.findOneAndUpdate({ user: id }, change, {
+            upsert: true,
+            returnDocument: "after"
+        });
         res.json(save);
     } catch (e) {
         res.status(500).json({ error: "server error" });
