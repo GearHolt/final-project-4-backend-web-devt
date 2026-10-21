@@ -4,6 +4,7 @@ const Save = require("../models/save");
 const File = require("../models/file");
 const User = require("../models/user");
 const { requireLogin } = require("../helpers/auth");
+const { openView } = require("../helpers/openview");
 
 const router = express.Router();
 
@@ -31,7 +32,18 @@ router.get("/:userId", async (req, res) => {
     try {
         const save = await Save.findOne({ user: id });
         if (!save) return res.status(404).json({ error: "no save found" });
-        res.json(save);
+
+        const files = await File.find({ slug: { $in: [...save.solved, ...save.hintsSeen] } });
+        const bySlug = new Map(files.map((f) => [f.slug, f]));
+
+        const readDocuments = save.hintsSeen
+            .filter((s) => bySlug.has(s))
+            .map((s) => ({ slug: s, name: bySlug.get(s).name }));
+        const items = await Promise.all(
+            save.solved.filter((s) => bySlug.has(s)).map((s) => openView(bySlug.get(s)))
+        );
+
+        res.json({ ...save.toObject(), readDocuments, items });
     } catch (e) {
         res.status(500).json({ error: "server error" });
     }
@@ -42,12 +54,13 @@ router.put("/:userId", async (req, res) => {
     const id = targetId(req, res);
     if (!id) return;
 
-    const { solved, location = "root", wrongGuesses = 0 } = req.body || {};
+    const { solved, readDocuments, location = "root" } = req.body || {};
     if (!Array.isArray(solved) || !solved.every((s) => typeof s === "string")) {
         return res.status(400).json({ error: "solved must be a list of slugs" });
     }
-    if (!Number.isInteger(wrongGuesses) || wrongGuesses < 0) {
-        return res.status(400).json({ error: "wrongGuesses must be 0 or more" });
+    if (readDocuments !== undefined &&
+        (!Array.isArray(readDocuments) || !readDocuments.every((s) => typeof s === "string"))) {
+        return res.status(400).json({ error: "readDocuments must be a list of slugs" });
     }
 
     try {
@@ -55,20 +68,28 @@ router.put("/:userId", async (req, res) => {
         const known = await File.countDocuments({ slug: { $in: list } });
         if (known !== list.length) return res.status(400).json({ error: "unknown slug in solved" });
 
+        let docs;
+        if (readDocuments !== undefined) {
+            docs = [...new Set(readDocuments)];
+            const real = await File.countDocuments({ slug: { $in: docs }, type: "file" });
+            if (real !== docs.length) return res.status(400).json({ error: "unknown file in readDocuments" });
+        }
+
         const folder = await File.exists({ slug: location, type: "folder" });
         if (!folder) return res.status(400).json({ error: "location is not a folder" });
 
         if (!(await User.exists({ _id: id }))) return res.status(404).json({ error: "user not found" });
 
-        // finished once every lock is in the list, the server stamps the time itself
-        const locks = await File.find({ "lock.answerHash": { $exists: true } }).select("slug");
-        const finished = locks.every((l) => list.includes(l.slug));
+        // Finished = the one isFinal file's slug is in solved (not "every lock" anymore).
+        const finalFile = await File.findOne({ isFinal: true }).select("slug");
+        const finished = !!finalFile && list.includes(finalFile.slug);
         const before = await Save.findOne({ user: id });
 
         const change = {
-            $set: { solved: list, location, wrongGuesses, updatedAt: new Date() },
+            $set: { solved: list, location, updatedAt: new Date() },
             $setOnInsert: { startedAt: new Date() }
         };
+        if (docs) change.$set.hintsSeen = docs;
         if (!finished) change.$unset = { finishedAt: "" };
         else if (!before || !before.finishedAt) change.$set.finishedAt = new Date();
 
@@ -89,25 +110,6 @@ router.delete("/:userId", async (req, res) => {
         const gone = await Save.findOneAndDelete({ user: id });
         if (!gone) return res.status(404).json({ error: "no save found" });
         res.json({ message: "save deleted" });
-    } catch (e) {
-        res.status(500).json({ error: "server error" });
-    }
-});
-
-//everything player has read or seen
-router.get("/:userId/clues", async (req, res) => {
-    const id = targetId(req, res);
-    if (!id) return;
-    try {
-        const save = await Save.findOne({ user: id });
-        if (!save) return res.status(404).json({ error: "no save found" });
-
-        const files = await File.find({ slug: { $in: save.hintsSeen } });
-        files.sort((a, b) => save.hintsSeen.indexOf(a.slug) - save.hintsSeen.indexOf(b.slug));
-
-        res.json(files.map((f) => ({
-            slug: f.slug, name: f.name, parent: f.parent, document: f.document
-        })));
     } catch (e) {
         res.status(500).json({ error: "server error" });
     }
