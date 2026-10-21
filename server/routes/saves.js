@@ -54,16 +54,14 @@ router.put("/:userId", async (req, res) => {
     const id = targetId(req, res);
     if (!id) return;
 
-    const { solved, readDocuments, location = "root", wrongGuesses = 0 } = req.body || {};
+    // wrongGuesses is not read from the body. Only /solve ever changes it.
+    const { solved, readDocuments, location = "root" } = req.body || {};
     if (!Array.isArray(solved) || !solved.every((s) => typeof s === "string")) {
         return res.status(400).json({ error: "solved must be a list of slugs" });
     }
     if (readDocuments !== undefined &&
         (!Array.isArray(readDocuments) || !readDocuments.every((s) => typeof s === "string"))) {
         return res.status(400).json({ error: "readDocuments must be a list of slugs" });
-    }
-    if (!Number.isInteger(wrongGuesses) || wrongGuesses < 0) {
-        return res.status(400).json({ error: "wrongGuesses must be 0 or more" });
     }
 
     try {
@@ -83,9 +81,10 @@ router.put("/:userId", async (req, res) => {
 
         if (!(await User.exists({ _id: id }))) return res.status(404).json({ error: "user not found" });
 
-        //after all locks are done, server timestamps it
-        const locks = await File.find({ "lock.answerHash": { $exists: true } }).select("slug");
-        const finished = locks.every((l) => list.includes(l.slug));
+        // The run is finished once the lock on the final file is solved.
+        // The server timestamps it (the client never sends a time).
+        const finalFile = await File.findOne({ isFinal: true }).select("slug");
+        const finished = !!finalFile && list.includes(finalFile.slug);
         const before = await Save.findOne({ user: id });
 
         const change = {
