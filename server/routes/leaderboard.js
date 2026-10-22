@@ -32,6 +32,7 @@ router.get("/", adminIfAll, async (req, res) => {
 // submit, the score comes from the player's save
 router.post("/", requireLogin, async (req, res) => {
     try {
+        const WRONG_PENALTY = 50;
         const save = await Save.findOne({ user: req.user.id });
         if (!save) return res.status(400).json({ error: "no save found, finish the game first" });
         if (!save.finishedAt) return res.status(400).json({ error: "game not finished yet" });
@@ -39,18 +40,20 @@ router.post("/", requireLogin, async (req, res) => {
 
         const seconds = Math.max(0, Math.round((save.finishedAt - save.startedAt) / 1000));
         const speedPoints = Math.round((1000 * HALF_MARKS) / (HALF_MARKS + seconds));
-        const score = Math.max(0, speedPoints - save.wrongGuesses * 50);
+        const wrong = save.wrongGuesses ?? 0;
+        const score = Math.max(0, speedPoints - wrong * WRONG_PENALTY);
 
         const old = await Score.findOne({ user: req.user.id });
-        if (old && old.score >= score) return res.json(old); // keep the best one
+        if (old && old.score >= score) return res.json({ ...old.toObject(), improved: false });
 
         const entry = await Score.findOneAndUpdate(
             { user: req.user.id },
-            { username: req.user.username, score, seconds, wrongGuesses: save.wrongGuesses, createdAt: new Date() },
+            { username: req.user.username, score, seconds, wrongGuesses: wrong, createdAt: new Date() },
             { upsert: true, returnDocument: "after" }
         );
-        res.status(201).json(entry);
+        res.status(201).json({ ...entry.toObject(), improved: true });
     } catch (e) {
+        if (e.code === 11000) return res.status(409).json({ error: "score already submitted, try again" });
         res.status(500).json({ error: "server error" });
     }
 });
