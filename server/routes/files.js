@@ -47,6 +47,12 @@ router.post("/:slug/solve", requireLogin, async (req, res) => {
             );
             return res.json({ correct: false });
         }
+
+        await Save.updateOne(
+            { user: req.user.id },
+            { $addToSet: { verified: f.slug }, $setOnInsert: { startedAt: new Date() }},
+            { upsert: true }
+        );
         res.json({ correct: true, item: await openView(f) });
     } catch (e) {
         res.status(500).json({ error: "server error" });

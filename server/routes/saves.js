@@ -54,7 +54,7 @@ router.put("/:userId", async (req, res) => {
     const id = targetId(req, res);
     if (!id) return;
 
-    // wrongGuesses is not read from the body. Only /solve ever changes it.
+    // wrongGuesses and verified are never read from the body. Only /solve changes them.
     const { solved, readDocuments, location = "root" } = req.body || {};
     if (!Array.isArray(solved) || !solved.every((s) => typeof s === "string")) {
         return res.status(400).json({ error: "solved must be a list of slugs" });
@@ -69,6 +69,12 @@ router.put("/:userId", async (req, res) => {
         const known = await File.countDocuments({ slug: { $in: list } });
         if (known !== list.length) return res.status(400).json({ error: "unknown slug in solved" });
 
+        const before = await Save.findOne({ user: id });
+        const verified = new Set(before?.verified ?? []);
+        if (!list.every((s) => verified.has(s))) {
+            return res.status(400).json({ error: "solved has a lock that was never solved" });
+        }
+
         let docs;
         if (readDocuments !== undefined) {
             docs = [...new Set(readDocuments)];
@@ -81,11 +87,13 @@ router.put("/:userId", async (req, res) => {
 
         if (!(await User.exists({ _id: id }))) return res.status(404).json({ error: "user not found" });
 
-        // The run is finished once the lock on the final file is solved.
-        // The server timestamps it (the client never sends a time).
+        /*
+            The run is finished once the final file's lock is solved. Because every
+            slug in `list` is verified, this can no longer be faked from the client.
+            The server timestamps it (the client never sends a time).
+        */
         const finalFile = await File.findOne({ isFinal: true }).select("slug");
         const finished = !!finalFile && list.includes(finalFile.slug);
-        const before = await Save.findOne({ user: id });
 
         const change = {
             $set: { solved: list, location, updatedAt: new Date() },
