@@ -87,13 +87,9 @@ router.put("/:userId", async (req, res) => {
 
         if (!(await User.exists({ _id: id }))) return res.status(404).json({ error: "user not found" });
 
-        /*
-            The run is finished once the final file's lock is solved. Because every
-            slug in `list` is verified, this can no longer be faked from the client.
-            The server timestamps it (the client never sends a time).
-        */
-        const finalFile = await File.findOne({ isFinal: true }).select("slug");
-        const finished = !!finalFile && list.includes(finalFile.slug);
+        //had to change this so that the game actually ends. run finishes after all locks are solved
+        const locks = await File.find({ "lock.answerHash": { $exists: true } }).select("slug");
+        const finished = locks.every((l) => list.includes(l.slug));
 
         const change = {
             $set: { solved: list, location, updatedAt: new Date() },

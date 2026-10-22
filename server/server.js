@@ -3,10 +3,8 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const app = express();
-const morgan = require("morgan");
 
 app.use(express.json());
-app.use(morgan("dev"));
 app.use(cors({ origin: process.env.CLIENT_URL || "*" }));
 
 app.get("/health", (req, res) => res.send("ok"));
