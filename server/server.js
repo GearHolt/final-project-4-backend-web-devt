@@ -13,6 +13,7 @@ app.use("/api/files", require("./routes/files"));
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/saves", require("./routes/saves"));
 app.use("/api/leaderboard", require("./routes/leaderboard"));
+app.use("/api/users", require("./routes/users"));
 app.use("/api", (req, res) => res.status(404).json({ error: "Not found" }));
 
 app.use((err, req, res, next) => {
