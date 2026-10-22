@@ -54,8 +54,7 @@ router.put("/:userId", async (req, res) => {
     const id = targetId(req, res);
     if (!id) return;
 
-    // wrongGuesses and verified are never read from the body. Only /solve changes them.
-    const { solved, readDocuments, location = "root" } = req.body || {};
+    const { solved, readDocuments, location = "root", wrongGuesses = 0 } = req.body || {};
     if (!Array.isArray(solved) || !solved.every((s) => typeof s === "string")) {
         return res.status(400).json({ error: "solved must be a list of slugs" });
     }
@@ -63,17 +62,14 @@ router.put("/:userId", async (req, res) => {
         (!Array.isArray(readDocuments) || !readDocuments.every((s) => typeof s === "string"))) {
         return res.status(400).json({ error: "readDocuments must be a list of slugs" });
     }
+    if (!Number.isInteger(wrongGuesses) || wrongGuesses < 0) {
+        return res.status(400).json({ error: "wrongGuesses must be 0 or more" });
+    }
 
     try {
         const list = [...new Set(solved)];
         const known = await File.countDocuments({ slug: { $in: list } });
         if (known !== list.length) return res.status(400).json({ error: "unknown slug in solved" });
-
-        const before = await Save.findOne({ user: id });
-        const verified = new Set(before?.verified ?? []);
-        if (!list.every((s) => verified.has(s))) {
-            return res.status(400).json({ error: "solved has a lock that was never solved" });
-        }
 
         let docs;
         if (readDocuments !== undefined) {
@@ -87,12 +83,13 @@ router.put("/:userId", async (req, res) => {
 
         if (!(await User.exists({ _id: id }))) return res.status(404).json({ error: "user not found" });
 
-        //had to change this so that the game actually ends. run finishes after all locks are solved
+        //after all locks are done, server timestamps it
         const locks = await File.find({ "lock.answerHash": { $exists: true } }).select("slug");
         const finished = locks.every((l) => list.includes(l.slug));
+        const before = await Save.findOne({ user: id });
 
         const change = {
-            $set: { solved: list, location, updatedAt: new Date() },
+            $set: { solved: list, location, wrongGuesses, updatedAt: new Date() },
             $setOnInsert: { startedAt: new Date() }
         };
         if (docs) change.$set.hintsSeen = docs;
