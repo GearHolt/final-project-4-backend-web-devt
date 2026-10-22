@@ -2,10 +2,15 @@ require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
+const allowed = (process.env.CLIENT_URL || "")
+    .split(",")
+    .map((s) => s.trim().replace(/\/$/, ""))
+    .filter(Boolean);
 const app = express();
 
 app.use(express.json());
-app.use(cors({ origin: process.env.CLIENT_URL || "*" }));
+
+app.use(cors({ origin: allowed.length ? allowed : "*" }));
 
 app.get("/health", (req, res) => res.send("ok"));
 
