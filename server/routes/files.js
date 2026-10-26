@@ -1,9 +1,11 @@
 const express = require("express");
 const crypto = require("crypto");
 const File = require("../models/file");
-const Save = require("../models/save");
+const { recordScoreEvent } = require("../helpers/scoreStore");
 const { requireLogin } = require("../helpers/auth");
-const { isLocked, openView } = require("../helpers/openview");
+const { isLocked, openView, lockedView } = require("../helpers/openview");
+const { revealHint } = require("../helpers/hint");
+const { lockSlugs } = require("../helpers/locks");
 
 const router = express.Router();
 
@@ -16,10 +18,7 @@ router.get("/:slug", async (req, res) => {
         if (!f) return res.status(404).json({ error: "not found" });
 
         if (isLocked(f)) {
-            return res.json({
-                slug: f.slug, name: f.name, type: f.type, locked: true,
-                lock: { prompt: f.lock.prompt, hint: f.lock.hint }
-            });
+            return res.json(lockedView(f));
         }
         res.json(await openView(f));
     } catch (e) {
@@ -37,24 +36,26 @@ router.post("/:slug/solve", requireLogin, async (req, res) => {
         if (!isLocked(f)) return res.status(400).json({ error: "not locked" });
 
         if (hash(answer) !== f.lock.answerHash) {
-            await Save.updateOne(
-                { user: req.user.id },
-                {
-                    $inc: { wrongGuesses: 1 },
-                    $setOnInsert: { startedAt: new Date() }
-                },
-                { upsert: true }
-            );
-            return res.json({ correct: false });
+            const { state } = await recordScoreEvent(req.user.id, { type: "wrong", slug: f.slug });
+            return res.json({ correct: false, score: state.playerScore });
         }
 
-        await Save.updateOne(
-            { user: req.user.id },
-            { $addToSet: { verified: f.slug }, $setOnInsert: { startedAt: new Date() }},
-            { upsert: true }
-        );
-        res.json({ correct: true, item: await openView(f) });
+        // lockSlugs lets the solve that verifies the last lock finish the run (stamp finishedAt).
+        const { state } = await recordScoreEvent(req.user.id, { type: "solve", slug: f.slug }, undefined, { lockSlugs: () => lockSlugs(File) });
+        res.json({ correct: true, item: await openView(f), score: state.playerScore });
     } catch (e) {
+        if (e.code === "SCORE_CONFLICT") return res.status(409).json({ error: "too many requests at once, try again" });
+        res.status(500).json({ error: "server error" });
+    }
+});
+
+// Reveals a lock's hint. The first reveal per lock costs points; repeats are free.
+router.post("/:slug/hint", requireLogin, async (req, res) => {
+    try {
+        const { status, body } = await revealHint(req.user.id, req.params.slug);
+        res.status(status).json(body);
+    } catch (e) {
+        if (e.code === "SCORE_CONFLICT") return res.status(409).json({ error: "too many requests at once, try again" });
         res.status(500).json({ error: "server error" });
     }
 });
