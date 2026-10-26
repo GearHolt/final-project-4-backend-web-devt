@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
-    "seed": "node seed.js"
+    "seed": "node seed.js",
+    "reset:v2": "node scripts/resetForV2.js"
   },
   "engines": {
     "node": ">=18"

@@ -1,1 +1,3 @@
 final-project-4-backend-web-devt.iml
+server/node_modules
+server/.env
