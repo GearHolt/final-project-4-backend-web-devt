@@ -1,13 +1,12 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const Score = require("../models/score");
-const Save = require("../models/save");
 const { requireLogin, requireAdmin } = require("../helpers/auth");
+const { submitFinalScore } = require("../helpers/finalize");
 
 const router = express.Router();
 
-const HALF_MARKS = 300; // seconds to get half the speed points
-const PUBLIC_FIELDS = "user username score seconds wrongGuesses createdAt";
+const PUBLIC_FIELDS = "user username score seconds wrongGuesses breakdown createdAt";
 
 // Only checks the token when ?all=true is asked for, so the normal top 10 stays public.
 function adminIfAll(req, res, next) {
@@ -29,29 +28,10 @@ router.get("/", adminIfAll, async (req, res) => {
     }
 });
 
-// submit, the score comes from the player's save
 router.post("/", requireLogin, async (req, res) => {
     try {
-        const WRONG_PENALTY = 50;
-        const save = await Save.findOne({ user: req.user.id });
-        if (!save) return res.status(400).json({ error: "no save found, finish the game first" });
-        if (!save.finishedAt) return res.status(400).json({ error: "game not finished yet" });
-        if (!save.startedAt) return res.status(400).json({ error: "save has no start time, start a new game" });
-
-        const seconds = Math.max(0, Math.round((save.finishedAt - save.startedAt) / 1000));
-        const speedPoints = Math.round((1000 * HALF_MARKS) / (HALF_MARKS + seconds));
-        const wrong = save.wrongGuesses ?? 0;
-        const score = Math.max(0, speedPoints - wrong * WRONG_PENALTY);
-
-        const old = await Score.findOne({ user: req.user.id });
-        if (old && old.score >= score) return res.json({ ...old.toObject(), improved: false });
-
-        const entry = await Score.findOneAndUpdate(
-            { user: req.user.id },
-            { username: req.user.username, score, seconds, wrongGuesses: wrong, createdAt: new Date() },
-            { upsert: true, returnDocument: "after" }
-        );
-        res.status(201).json({ ...entry.toObject(), improved: true });
+        const { status, body } = await submitFinalScore(req.user.id, req.user.username);
+        res.status(status).json(body);
     } catch (e) {
         if (e.code === 11000) return res.status(409).json({ error: "score already submitted, try again" });
         res.status(500).json({ error: "server error" });

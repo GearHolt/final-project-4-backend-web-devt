@@ -5,6 +5,8 @@ const File = require("../models/file");
 const User = require("../models/user");
 const { requireLogin } = require("../helpers/auth");
 const { openView } = require("../helpers/openview");
+const { readSaveBody, buildSaveChange } = require("../helpers/saveBody");
+const { pauseRun, resumeRun } = require("../helpers/pause");
 
 const router = express.Router();
 
@@ -54,15 +56,13 @@ router.put("/:userId", async (req, res) => {
     const id = targetId(req, res);
     if (!id) return;
 
-    // wrongGuesses and verified are never read from the body. Only /solve changes them.
-    const { solved, readDocuments, location = "root" } = req.body || {};
-    if (!Array.isArray(solved) || !solved.every((s) => typeof s === "string")) {
-        return res.status(400).json({ error: "solved must be a list of slugs" });
-    }
-    if (readDocuments !== undefined &&
-        (!Array.isArray(readDocuments) || !readDocuments.every((s) => typeof s === "string"))) {
-        return res.status(400).json({ error: "readDocuments must be a list of slugs" });
-    }
+    /**
+     * Only solved, readDocuments and location are read from the body (see helpers/saveBody.js). 
+     * Score fields, wrongGuesses and verified are never read. Only /solve and /hint change them.
+     */
+    const body = readSaveBody(req.body);
+    if (body.error) return res.status(400).json({ error: body.error });
+    const { solved, readDocuments, location } = body.value;
 
     try {
         const list = [...new Set(solved)];
@@ -87,18 +87,8 @@ router.put("/:userId", async (req, res) => {
 
         if (!(await User.exists({ _id: id }))) return res.status(404).json({ error: "user not found" });
 
-        //had to change this so that the game actually ends. run finishes after all locks are solved
-        const locks = await File.find({ "lock.answerHash": { $exists: true } }).select("slug");
-        const finished = locks.every((l) => list.includes(l.slug));
-
-        const change = {
-            $set: { solved: list, location, updatedAt: new Date() },
-            $setOnInsert: { startedAt: new Date() }
-        };
-        if (docs) change.$set.hintsSeen = docs;
-        if (!finished) change.$unset = { finishedAt: "" };
-        else if (!before || !before.finishedAt) change.$set.finishedAt = new Date();
-
+        // finishedAt is not set here. The server stamps it when the last lock is solved (helpers/scoreStore.js).
+        const change = buildSaveChange({ list, location, docs });
         const save = await Save.findOneAndUpdate({ user: id }, change, {
             upsert: true,
             returnDocument: "after"
@@ -108,6 +98,20 @@ router.put("/:userId", async (req, res) => {
         res.status(500).json({ error: "server error" });
     }
 });
+
+function clockRoute(run) {
+    return async (req, res) => {
+        try {
+            const { status, body } = await run(req.user.id);
+            res.status(status).json(body);
+        } catch (e) {
+            if (e.code === "SCORE_CONFLICT") return res.status(409).json({ error: "too many requests at once, try again" });
+            res.status(500).json({ error: "server error" });
+        }
+    };
+}
+router.post("/me/pause", clockRoute(pauseRun));
+router.post("/me/resume", clockRoute(resumeRun));
 
 router.delete("/:userId", async (req, res) => {
     const id = targetId(req, res);
