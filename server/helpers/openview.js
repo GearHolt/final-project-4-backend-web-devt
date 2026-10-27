@@ -18,7 +18,7 @@ async function openView(f) {
 function lockedView(f) {
     return {
         slug: f.slug, name: f.name, type: f.type, locked: true,
-        lock: { prompt: f.lock.prompt, hint: f.lock.hint, hasHint: !!f.lock.hint }
+        lock: { prompt: f.lock.prompt, hasHint: !!f.lock.hint }
     };
 }
 
