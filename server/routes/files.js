@@ -6,6 +6,7 @@ const { requireLogin } = require("../helpers/auth");
 const { isLocked, openView, lockedView } = require("../helpers/openview");
 const { revealHint } = require("../helpers/hint");
 const { lockSlugs } = require("../helpers/locks");
+const { solveLimiter, hintLimiter } = require("../helpers/rateLimit");
 
 const router = express.Router();
 
@@ -26,7 +27,8 @@ router.get("/:slug", async (req, res) => {
     }
 });
 
-router.post("/:slug/solve", requireLogin, async (req, res) => {
+// Limiters run after requireLogin (they key on req.user.id) and before any scoring, so a blocked request is never a wrong guess.
+router.post("/:slug/solve", requireLogin, solveLimiter, async (req, res) => {
     try {
         const { answer } = req.body || {};
         if (answer === undefined) return res.status(400).json({ error: "need an answer" });
@@ -50,7 +52,7 @@ router.post("/:slug/solve", requireLogin, async (req, res) => {
 });
 
 // Reveals a lock's hint. The first reveal per lock costs points; repeats are free.
-router.post("/:slug/hint", requireLogin, async (req, res) => {
+router.post("/:slug/hint", requireLogin, hintLimiter, async (req, res) => {
     try {
         const { status, body } = await revealHint(req.user.id, req.params.slug);
         res.status(status).json(body);

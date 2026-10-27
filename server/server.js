@@ -8,6 +8,8 @@ const allowed = (process.env.CLIENT_URL || "")
     .filter(Boolean);
 const app = express();
 
+app.set("trust proxy", 1);
+
 app.use(express.json());
 
 app.use(cors({ origin: allowed.length ? allowed : "*" }));
