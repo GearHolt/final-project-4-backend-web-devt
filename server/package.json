@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "seed": "node seed.js",
+    "test": "node --test",
     "reset:v2": "node scripts/resetForV2.js"
   },
   "engines": {
